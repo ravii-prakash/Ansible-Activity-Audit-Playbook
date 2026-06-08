@@ -1,0 +1,4 @@
+---
+# Secrets for the dev_servers group — encrypt before committing
+# ansible-vault encrypt group_vars/dev_servers/vault.yml
+vault_become_pass: "REPLACE_WITH_SUDO_PASSWORD_THEN_ENCRYPT_THIS_FILE"

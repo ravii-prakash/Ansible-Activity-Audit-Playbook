@@ -1,0 +1,205 @@
+---
+# 1. Pre-flight checks
+
+- name: Assert Python 3 is the active interpreter
+  ansible.builtin.assert:
+    that:
+      - ansible_python_version is version('3.0', '>=')
+    fail_msg: >-
+      Python 3 is required but the active interpreter is Python {{ ansible_python_version }}.
+      Install Python 3 on the target first: yum install python3
+      Then ensure inventory sets: ansible_python_interpreter=/usr/bin/python3
+    success_msg: "Python {{ ansible_python_version }} confirmed."
+  tags:
+    - audit
+    - preflight
+
+- name: Assert target OS is CentOS 7
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "CentOS"
+      - ansible_distribution_major_version | int == 7
+    fail_msg: >-
+      This role requires CentOS 7.
+      Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}
+    success_msg: >-
+      OS check passed: {{ ansible_distribution }} {{ ansible_distribution_version }}
+  tags:
+    - audit
+    - preflight
+
+# 2. Setup
+
+- name: Ensure audit group exists on remote host
+  ansible.builtin.group:
+    name: "{{ dev_activity_audit_report_group }}"
+    state: present
+    system: true
+  become: true
+  tags:
+    - audit
+    - setup
+
+- name: Ensure local report directory exists on control node
+  ansible.builtin.file:
+    path: "{{ dev_activity_audit_local_report_dir }}"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+  become: false
+  tags:
+    - audit
+    - setup
+
+- name: Deploy logrotate config for audit report and events log
+  ansible.builtin.copy:
+    src: dev_activity_audit_logrotate
+    dest: /etc/logrotate.d/dev_activity_audit
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - audit
+    - setup
+
+# 3. Discover developer directories
+
+- name: Discover developer subdirectories under projects directory
+  ansible.builtin.find:
+    paths: "{{ dev_activity_audit_projects_dir }}"
+    file_type: directory
+    recurse: false
+  register: dev_dirs_raw
+  become: true
+  tags:
+    - audit
+    - discover
+
+- name: Fail if no developer directories were found
+  ansible.builtin.fail:
+    msg: >-
+      No subdirectories found under {{ dev_activity_audit_projects_dir }}.
+      Verify the directory exists and contains developer project subdirectories.
+  when: dev_dirs_raw.files | length == 0
+  tags:
+    - audit
+    - discover
+
+- name: Filter to target users (empty list scans all)
+  ansible.builtin.set_fact:
+    dev_dirs: >-
+      {{ dev_dirs_raw.files | sort(attribute='path') |
+         selectattr('path', 'search', '/(' + dev_activity_audit_target_users | join('|') + ')$') | list
+         if dev_activity_audit_target_users | length > 0
+         else dev_dirs_raw.files | sort(attribute='path') }}
+  tags:
+    - audit
+    - discover
+
+# 4. Two find passes per directory: count recent files, then find the latest modified
+
+- name: Count files modified in the last {{ dev_activity_audit_days }} days per developer
+  ansible.builtin.shell: >
+    find {{ item.path | quote }}
+    -type f
+    -mtime -{{ dev_activity_audit_days }}
+    2>/dev/null
+    | wc -l
+  args:
+    executable: /bin/bash
+  loop: "{{ dev_dirs }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: recent_file_counts
+  become: true
+  changed_when: false
+  tags:
+    - audit
+    - collect
+
+- name: Get most recently modified file per developer directory
+  ansible.builtin.shell: >
+    find {{ item.path | quote }}
+    -type f
+    -printf '%TY-%Tm-%Td %TH:%TM  %p\n'
+    2>/dev/null
+    | sort
+    | tail -1
+  args:
+    executable: /bin/bash
+  loop: "{{ dev_dirs }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: latest_file_results
+  become: true
+  changed_when: false
+  tags:
+    - audit
+    - collect
+
+# 5. Combine both find results into a list of dicts using matching loop index
+
+- name: Initialise developer activity list
+  ansible.builtin.set_fact:
+    dev_activity_list: []
+  tags:
+    - audit
+    - collect
+
+- name: Build developer activity entry for each directory
+  ansible.builtin.set_fact:
+    dev_activity_list: >-
+      {{ dev_activity_list + [{
+        'developer':    item.item.path | basename,
+        'path':         item.item.path,
+        'recent_files': item.stdout | trim | int,
+        'is_active':    (item.stdout | trim | int) > 0,
+        'latest_file':  latest_file_results.results[ansible_loop.index0].stdout | trim
+      }] }}
+  loop: "{{ recent_file_counts.results }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+    extended: true
+  tags:
+    - audit
+    - collect
+
+# 6. Write the report on the remote host
+
+- name: Render and write developer activity report on remote host
+  ansible.builtin.template:
+    src: report.j2
+    dest: "{{ dev_activity_audit_report_path }}"
+    owner: root
+    group: "{{ dev_activity_audit_report_group }}"
+    mode: "{{ dev_activity_audit_report_mode }}"
+  become: true
+  notify: Record report generation in audit events log
+  tags:
+    - audit
+    - report
+
+# 7. Fetch the root-owned report to the control node (needs become)
+
+- name: Fetch activity report to control node
+  ansible.builtin.fetch:
+    src: "{{ dev_activity_audit_report_path }}"
+    dest: >-
+      {{ dev_activity_audit_local_report_dir }}/{{ inventory_hostname }}_dev_activity_{{ ansible_date_time.date }}.txt
+    flat: true
+  become: true
+  tags:
+    - audit
+    - report
+
+- name: Show local report path
+  ansible.builtin.debug:
+    msg: >-
+      Report saved to control node:
+      {{ dev_activity_audit_local_report_dir }}/{{ inventory_hostname }}_dev_activity_{{ ansible_date_time.date }}.txt
+  delegate_to: localhost
+  become: false
+  tags:
+    - audit
+    - report

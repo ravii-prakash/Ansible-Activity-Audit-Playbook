@@ -1,0 +1,61 @@
+{# Developer activity report template #}
+{%- set active_devs   = dev_activity_list | selectattr('is_active') | list | sort(attribute='developer') -%}
+{%- set inactive_devs = dev_activity_list | rejectattr('is_active') | list | sort(attribute='developer') -%}
+================================================================================
+  DEVELOPER ACTIVITY REPORT
+================================================================================
+  Generated  : {{ ansible_date_time.iso8601 }}
+  Server     : {{ ansible_hostname }}  ({{ ansible_default_ipv4.address | default('N/A') }})
+  Directory  : {{ dev_activity_audit_projects_dir }}
+  Threshold  : {{ dev_activity_audit_days }} days
+  Report file: {{ dev_activity_audit_report_path }}
+  Access     : root + '{{ dev_activity_audit_report_group }}' group only (mode {{ dev_activity_audit_report_mode }})
+================================================================================
+
+ACTIVE DEVELOPERS — {{ active_devs | length }} of {{ dev_activity_list | length }}
+Files modified within the last {{ dev_activity_audit_days }} day(s):
+--------------------------------------------------------------------------------
+{% if active_devs %}
+{% for dev in active_devs %}
+  Developer    : {{ dev.developer }}
+  Path         : {{ dev.path }}
+  Recent files : {{ dev.recent_files }} file(s) modified in last {{ dev_activity_audit_days }} day(s)
+  Latest file  : {{ dev.latest_file if dev.latest_file else 'N/A' }}
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+{% else %}
+  (none — no developer directories had activity in this period)
+{% endif %}
+
+INACTIVE DEVELOPERS — {{ inactive_devs | length }} of {{ dev_activity_list | length }}
+No files modified in the last {{ dev_activity_audit_days }} day(s):
+--------------------------------------------------------------------------------
+{% if inactive_devs %}
+{% for dev in inactive_devs %}
+  Developer    : {{ dev.developer }}
+  Path         : {{ dev.path }}
+  Latest file  : {{ dev.latest_file if dev.latest_file else 'No files found in directory' }}
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+{% else %}
+  (none — all developer directories showed recent activity)
+{% endif %}
+
+SUMMARY
+--------------------------------------------------------------------------------
+  Total developers : {{ dev_activity_list | length }}
+  Active           : {{ active_devs | length }}
+  Inactive         : {{ inactive_devs | length }}
+{% if dev_activity_list | length > 0 %}
+  Activity rate    : {{ ((active_devs | length / dev_activity_list | length) * 100) | round(1) }}%
+{% endif %}
+
+================================================================================
+  CONFIDENTIALITY NOTICE
+  This report reveals information about individual developer work patterns.
+  Access is restricted to root and members of the '{{ dev_activity_audit_report_group }}'
+  group on {{ ansible_hostname }}.  Handle accordingly — do not distribute without
+  appropriate authorisation.
+================================================================================

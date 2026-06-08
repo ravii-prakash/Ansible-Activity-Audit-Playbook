@@ -1,0 +1,20 @@
+---
+- name: Audit developer activity on dev server
+  hosts: dev_servers
+  gather_facts: true
+  become: false
+
+  vars:
+    # Map group_vars names into the role namespace
+    dev_activity_audit_target_users:     "{{ audit_target_users }}"
+    dev_activity_audit_projects_dir:    "{{ audit_projects_dir }}"
+    dev_activity_audit_days:            "{{ audit_activity_days }}"
+    dev_activity_audit_report_path:     "{{ audit_report_path }}"
+    dev_activity_audit_report_group:    "{{ audit_report_group }}"
+    dev_activity_audit_report_mode:     "{{ audit_report_mode }}"
+    dev_activity_audit_local_report_dir: "{{ audit_local_report_dir }}"
+
+  roles:
+    - role: dev_activity_audit
+      tags:
+        - audit

@@ -1,0 +1,4 @@
+---
+# Non-secret group vars for dev_servers
+# Only needed if the ansible user doesn't have NOPASSWD sudo
+ansible_become_password: "{{ vault_become_pass }}"

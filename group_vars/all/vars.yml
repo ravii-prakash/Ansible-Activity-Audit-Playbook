@@ -1,0 +1,16 @@
+---
+# Non-sensitive config; secrets live in vault.yml
+
+# Specific users to audit; set to [] to scan every subdirectory under audit_projects_dir
+audit_target_users: ['blob', 'alice']
+
+audit_projects_dir: /opt/dev/projects
+audit_report_path: /var/log/dev_activity_report.txt
+audit_local_report_dir: "{{ playbook_dir }}/reports"
+
+# Days without file changes before a directory is marked inactive
+audit_activity_days: 7
+
+audit_report_group: audit
+# 0640: root rw, group r, world none
+audit_report_mode: "0640"

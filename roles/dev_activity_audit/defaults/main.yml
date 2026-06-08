@@ -1,0 +1,12 @@
+---
+dev_activity_audit_projects_dir: /opt/dev/projects
+# Specific users to audit; set to [] to scan every subdirectory
+dev_activity_audit_target_users: ['blob', 'alice']
+# Days without file changes before a directory is marked inactive
+dev_activity_audit_days: 7
+dev_activity_audit_report_path: /var/log/dev_activity_report.txt
+# OS group that can read the report alongside root
+dev_activity_audit_report_group: audit
+# 0640: root rw, group r, world none
+dev_activity_audit_report_mode: "0640"
+dev_activity_audit_local_report_dir: "{{ playbook_dir }}/reports"

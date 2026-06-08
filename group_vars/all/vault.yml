@@ -1,0 +1,4 @@
+---
+# Global secrets (applies to all groups) — encrypt before committing
+# ansible-vault encrypt group_vars/all/vault.yml
+# Group-specific secrets (e.g. vault_become_pass) live in group_vars/dev_servers/vault.yml
