@@ -1,0 +1,5 @@
+---
+# Role-level vars (higher priority than defaults; callers should not override these)
+
+# Path on the remote host where report generation events are appended
+_audit_notification_log: /var/log/dev_audit_events.log

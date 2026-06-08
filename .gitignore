@@ -1,0 +1,12 @@
+# Generated reports (fetched from remote hosts)
+reports/
+
+# Ansible retry files
+*.retry
+
+# Python
+*.pyc
+__pycache__/
+
+# macOS
+.DS_Store

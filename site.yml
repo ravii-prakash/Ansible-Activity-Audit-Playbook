@@ -1,0 +1,98 @@
+---
+# Play 1: fetch credentials from AWS Secrets Manager
+- name: "Bootstrap — fetch secrets from AWS Secrets Manager"
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars:
+    # Leave unset to use instance profile or env vars; override with -e "aws_profile=name"
+    aws_profile: "{{ lookup('env', 'AWS_PROFILE') | default(omit, true) }}"
+
+  tasks:
+    - name: Retrieve secret JSON from AWS Secrets Manager
+      ansible.builtin.set_fact:
+        _sm_data: >-
+          {{ lookup(
+               'amazon.aws.aws_secret',
+               aws_sm_secret_name,
+               region=aws_region,
+               profile=aws_profile | default(omit)
+             ) | from_json }}
+      no_log: true
+
+    - name: Validate that required keys are present in the secret
+      ansible.builtin.assert:
+        that:
+          - _sm_data.become_pass is defined
+          - _sm_data.ssh_private_key is defined
+        fail_msg: >-
+          Secret '{{ aws_sm_secret_name }}' in {{ aws_region }} is missing required
+          keys. Expected JSON with: become_pass, ssh_private_key.
+        success_msg: "Secret structure validated."
+
+    - name: Write SSH private key to temporary file (mode 0600)
+      ansible.builtin.copy:
+        content: "{{ _sm_data.ssh_private_key }}"
+        dest:    "{{ aws_sm_ssh_key_tmp_path }}"
+        mode:    "0600"
+      no_log: true
+
+    - name: Store become password in host fact for use by Play 2
+      ansible.builtin.set_fact:
+        _become_pass: "{{ _sm_data.become_pass }}"
+      no_log: true
+
+    - name: Confirm bootstrap complete (no secret values logged)
+      ansible.builtin.debug:
+        msg: >-
+          Secrets fetched from '{{ aws_sm_secret_name }}' ({{ aws_region }}).
+          SSH key written to {{ aws_sm_ssh_key_tmp_path }}.
+          Play 2 will connect using that key.
+
+# Play 2: run the audit on the target host
+- name: "Audit developer activity on dev server"
+  hosts: dev_servers
+  gather_facts: true
+  become: false
+
+  vars:
+    # SSH key path written by Play 1
+    ansible_ssh_private_key_file: "{{ aws_sm_ssh_key_tmp_path }}"
+    # Sudo password from Play 1's Secrets Manager fetch
+    ansible_become_password: "{{ hostvars['localhost']['_become_pass'] }}"
+    # Map group_vars names into the role namespace
+    dev_activity_audit_target_users:     "{{ audit_target_users }}"
+    dev_activity_audit_projects_dir:    "{{ audit_projects_dir }}"
+    dev_activity_audit_days:            "{{ audit_activity_days }}"
+    dev_activity_audit_report_path:     "{{ audit_report_path }}"
+    dev_activity_audit_report_group:    "{{ audit_report_group }}"
+    dev_activity_audit_report_mode:     "{{ audit_report_mode }}"
+    dev_activity_audit_local_report_dir: "{{ audit_local_report_dir }}"
+
+  roles:
+    - role: dev_activity_audit
+      tags:
+        - audit
+
+# Play 3: delete the temp SSH key unconditionally
+- name: "Cleanup — remove temporary SSH key"
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Overwrite temp key with zeros before deletion (shred)
+      ansible.builtin.command:
+        cmd: "shred -u {{ aws_sm_ssh_key_tmp_path | quote }}"
+      failed_when: false
+      changed_when: false
+
+    - name: Ensure temp key file is absent (fallback if shred unavailable)
+      ansible.builtin.file:
+        path:  "{{ aws_sm_ssh_key_tmp_path }}"
+        state: absent
+
+    - name: Confirm cleanup
+      ansible.builtin.debug:
+        msg: "Temporary SSH key {{ aws_sm_ssh_key_tmp_path }} has been removed."

@@ -1,0 +1,23 @@
+---
+# No secrets here — all credentials come from AWS Secrets Manager
+
+# Specific users to audit; set to [] to scan every subdirectory under audit_projects_dir
+audit_target_users: ['blob', 'alice']
+
+# AWS region for Secrets Manager (not us-east-1)
+aws_region: ap-southeast-2
+# Secret name; must contain become_pass and ssh_private_key keys
+aws_sm_secret_name: dev-audit/ansible-credentials
+# Temp SSH key path on control node; created in Play 1, deleted in Play 3
+aws_sm_ssh_key_tmp_path: /tmp/ansible_audit_id_ed25519
+
+audit_projects_dir: /opt/dev/projects
+audit_report_path: /var/log/dev_activity_report.txt
+audit_local_report_dir: "{{ playbook_dir }}/reports"
+
+# Days without file changes before a directory is marked inactive
+audit_activity_days: 7
+
+audit_report_group: audit
+# 0640: root rw, group r, world none
+audit_report_mode: "0640"

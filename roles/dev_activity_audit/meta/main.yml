@@ -1,0 +1,32 @@
+---
+# Role: dev_activity_audit
+# meta/main.yml
+
+galaxy_info:
+  role_name: dev_activity_audit
+  author: DevOps Team
+  description: >
+    Audits developer file activity under a shared projects directory on a
+    CentOS 7 server and produces a formatted management report.
+    Secrets (sudo password, SSH key) are fetched from AWS Secrets Manager
+    at runtime — no vault files or plaintext credentials in the repository.
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: EL
+      versions:
+        - 7
+
+  galaxy_tags:
+    - audit
+    - reporting
+    - devops
+    - compliance
+    - security
+
+collections:
+  - name: amazon.aws
+    version: ">=8.0.0"
+
+dependencies: []

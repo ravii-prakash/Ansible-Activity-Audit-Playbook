@@ -1,0 +1,12 @@
+---
+# Triggered when the report template task reports a change
+
+- name: Record report generation in audit events log
+  ansible.builtin.lineinfile:
+    path: "{{ _audit_notification_log }}"
+    line: "{{ ansible_date_time.iso8601 }} | {{ inventory_hostname }} | dev_activity_audit report updated"
+    create: true
+    owner: root
+    group: "{{ dev_activity_audit_report_group }}"
+    mode: "0640"
+  become: true
